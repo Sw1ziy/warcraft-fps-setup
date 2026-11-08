@@ -1,0 +1,24 @@
+# Never publish games, third-party binaries, progress, or local backups.
+*.exe
+*.dll
+*.mix
+*.mpq
+*.asi
+*.m3d
+*.flt
+*.ax
+*.w3z
+*.w3v
+*.w3p
+*.reg
+*.zip
+*.7z
+*.log
+*.tmp
+.warcraft-fps-setup/
+Save/
+Replay/
+Screenshots/
+dist/
+.DS_Store
+Thumbs.db
