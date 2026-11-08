@@ -35,7 +35,7 @@ $screen = [Windows.Forms.Screen]::PrimaryScreen
 $displayMode = [WarcraftDisplay]::Current($screen.DeviceName)
 $form = New-Object Windows.Forms.Form
 $form.Text = 'Warcraft III FPS Setup'
-$form.ClientSize = New-Object Drawing.Size(610, 340)
+$form.ClientSize = New-Object Drawing.Size(610, 410)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -50,7 +50,7 @@ function Add-Label([string]$Text, [int]$X, [int]$Y, [int]$Width, [int]$Height) {
 }
 $title = Add-Label 'Плавнее играть в Warcraft III' 22 18 560 32
 $title.Font = New-Object Drawing.Font('Segoe UI', 15, [Drawing.FontStyle]::Bold)
-$null = Add-Label 'Установка FPS Unlocker для классической версии 1.26a.' 22 57 565 26
+$null = Add-Label 'Высокий FPS и широкий экран для Warcraft III 1.26a.' 22 57 565 26
 $null = Add-Label 'Папка игры:' 22 96 550 24
 $pathBox = New-Object Windows.Forms.TextBox
 $pathBox.SetBounds(22, 124, 445, 29)
@@ -77,19 +77,30 @@ $displayBox.Enabled = $displayBox.Checked
 if ($displayBox.Enabled) {
     $displayBox.Text = "Настроить игру под основной экран: $($displayMode[0]) x $($displayMode[1]), $($displayMode[2]) Гц"
 } else {
-    $displayBox.Text = 'Режим экрана не определён. Будет установлен только анлокер.'
+    $displayBox.Text = 'Режим экрана не определён. Видеонастройки останутся прежними.'
 }
 $form.Controls.Add($displayBox)
+$wideBox = New-Object Windows.Forms.CheckBox
+$wideBox.Text = 'Исправить растяжение игрового мира (W3TrueWidescreen)'
+$wideBox.SetBounds(22, 215, 565, 27)
+$wideBox.Checked = $true
+$form.Controls.Add($wideBox)
+$hudBox = New-Object Windows.Forms.CheckBox
+$hudBox.Text = 'HUD на всю ширину экрана (растягивает саму панель)'
+$hudBox.SetBounds(42, 247, 545, 30)
+$hudBox.Checked = $true
+$form.Controls.Add($hudBox)
+$wideBox.Add_CheckedChanged({ $hudBox.Enabled = $wideBox.Checked })
 $install = New-Object Windows.Forms.Button
 $install.Text = 'Установить'
-$install.SetBounds(22, 227, 155, 38)
+$install.SetBounds(22, 294, 155, 38)
 $form.Controls.Add($install)
 $restore = New-Object Windows.Forms.Button
 $restore.Text = 'Восстановить'
-$restore.SetBounds(189, 227, 155, 38)
+$restore.SetBounds(189, 294, 155, 38)
 $form.Controls.Add($restore)
-$status = Add-Label 'Нужен интернет. Перед установкой закройте игру.' 22 276 565 30
-$null = Add-Label 'Разработчик установщика: Sw1ziy' 22 311 565 24
+$status = Add-Label 'Нужен интернет. Перед установкой закройте игру.' 22 344 565 30
+$null = Add-Label 'Разработчик установщика: Sw1ziy' 22 381 565 24
 
 $browse.Add_Click({
     $dialog = New-Object Windows.Forms.FolderBrowserDialog
@@ -105,20 +116,22 @@ function Invoke-SetupAction([bool]$Restore) {
     $browse.Enabled = $false
     $pathBox.Enabled = $false
     $displayBox.Enabled = $false
+    $wideBox.Enabled = $false
+    $hudBox.Enabled = $false
     $form.ControlBox = $false
     $form.UseWaitCursor = $true
-    $status.Text = $(if ($Restore) { 'Восстановление...' } else { 'Скачивание и установка анлокера...' })
+    $status.Text = $(if ($Restore) { 'Восстановление...' } else { 'Скачивание и установка выбранных исправлений...' })
     $form.Refresh()
     try {
         if ($Restore) {
             Restore-FpsFix $pathBox.Text.Trim().Trim('"')
-            $message = 'Прежние настройки и файл анлокера восстановлены.'
+            $message = 'Прежние настройки и файлы выбранной игры восстановлены.'
         } else {
             $settings = $null
             if ($displayBox.Checked) {
                 $settings = @{reswidth=$displayMode[0]; resheight=$displayMode[1]; refreshrate=$displayMode[2]}
             }
-            Install-FpsFix -GamePath $pathBox.Text.Trim().Trim('"') -DisplaySettings $settings
+            Install-FpsFix -GamePath $pathBox.Text.Trim().Trim('"') -DisplaySettings $settings -Widescreen:($wideBox.Checked) -FullWidthHud $hudBox.Checked
             $message = "Готово! Запустите игру обычным ярлыком.`nДля счётчика кадров введите /fps в игровом чате."
         }
         $status.Text = 'Готово.'
@@ -132,6 +145,8 @@ function Invoke-SetupAction([bool]$Restore) {
         $browse.Enabled = $true
         $pathBox.Enabled = $true
         $displayBox.Enabled = $null -ne $displayMode -and $displayMode[2] -gt 1
+        $wideBox.Enabled = $true
+        $hudBox.Enabled = $wideBox.Checked
         $form.ControlBox = $true
         $form.UseWaitCursor = $false
     }
@@ -140,7 +155,7 @@ $install.Add_Click({ Invoke-SetupAction $false })
 $restore.Add_Click({ Invoke-SetupAction $true })
 $form.AcceptButton = $install
 if ($CheckOnly) {
-    Write-Output "Developer: Sw1ziy; Display: $($displayMode -join ' x '); Controls: $($form.Controls.Count); Status: OK"
+    Write-Output "Developer: Sw1ziy; Display: $($displayMode -join ' x '); Controls: $($form.Controls.Count); Widescreen: $($wideBox.Checked); FullWidthHUD: $($hudBox.Checked); Status: OK"
     $form.Dispose()
     return
 }

@@ -3,6 +3,7 @@ $script:UnlockerUrl = 'https://github.com/UnryzeC/WC3_FPSUnlocker/releases/downl
 $script:UnlockerSha256 = 'f3b497d961a5d4e2a8a089773fde99fae2e020a8729f9a37d6f53a8216e9405c'
 $script:VideoKey = 'HKCU:\Software\Blizzard Entertainment\Warcraft III\Video'
 $script:VideoNames = @('reswidth', 'resheight', 'refreshrate', 'maxfps', 'lockfb')
+. (Join-Path $PSScriptRoot 'Widescreen.Core.ps1')
 
 function Get-GameFolder([string]$Path) {
     $folder = (Get-Item -LiteralPath $Path -ErrorAction Stop).FullName
@@ -36,12 +37,13 @@ function Get-VideoSnapshot {
     }
 }
 
-function Save-SetupState($State, [string]$Directory) {
-    $statePath = Join-Path $Directory 'state.json'
-    $tempState = Join-Path $Directory 'state.json.tmp'
+function Save-SetupState($State, [string]$Directory, [string]$FileName = 'state.json') {
+    $statePath = Join-Path $Directory $FileName
+    $tempState = $statePath + '.tmp'
     $State | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $tempState -Encoding UTF8
     if (Test-Path -LiteralPath $statePath) {
-        [IO.File]::Replace($tempState, $statePath, (Join-Path $Directory 'state.previous.json'))
+        $previous = [IO.Path]::GetFileNameWithoutExtension($FileName) + '.previous.json'
+        [IO.File]::Replace($tempState, $statePath, (Join-Path $Directory $previous))
     } else {
         [IO.File]::Move($tempState, $statePath)
     }
@@ -69,7 +71,9 @@ function Receive-Unlocker([string]$Destination) {
 function Install-FpsFix {
     param(
         [Parameter(Mandatory = $true)][string]$GamePath,
-        [hashtable]$DisplaySettings
+        [hashtable]$DisplaySettings,
+        [switch]$Widescreen,
+        [bool]$FullWidthHud = $true
     )
     $folder = Get-GameFolder $GamePath
     Assert-GameClosed
@@ -86,6 +90,9 @@ function Install-FpsFix {
         if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $script:UnlockerSha256) {
             throw 'Контрольная сумма анлокера не совпала. Установка отменена; повторите позже.'
         }
+        # Download and validate every selected component before changing the game.
+        $widePackage = $null
+        if ($Widescreen) { $widePackage = Receive-WidescreenPackage -FullWidthHud $FullWidthHud }
         Assert-GameClosed
         $module = Join-Path $folder 'FPSUnlocker.mix'
         $data = Join-Path $folder '.warcraft-fps-setup'
@@ -130,6 +137,7 @@ function Install-FpsFix {
                     New-ItemProperty -LiteralPath $script:VideoKey -Name $entry.Key -Value $entry.Value -PropertyType DWord -Force -ErrorAction Stop | Out-Null
                 }
             }
+            if ($widePackage) { Install-WidescreenFiles -GameFolder $folder -Package $widePackage }
         } catch {
             throw "Установка прервана. Резервная копия сохранена: используйте кнопку восстановления. $($_.Exception.Message)"
         }
@@ -146,6 +154,12 @@ function Restore-FpsFix([string]$GamePath) {
     $module = Join-Path $folder 'FPSUnlocker.mix'
     if ((Test-Path -LiteralPath $module) -and (Get-FileHash -LiteralPath $module -Algorithm SHA256).Hash -ne $state.InstalledSha256) {
         throw 'Анлокер был заменён после установки. Автоматическое восстановление остановлено, чтобы сохранить этот файл.'
+    }
+    # Preflight both components before restoring either one.
+    $wideState = Get-WidescreenState $folder
+    if ($wideState) {
+        Assert-WidescreenRestorable -GameFolder $folder -State $wideState
+        Restore-WidescreenFiles -GameFolder $folder -State $wideState
     }
     if ($state.ManagedVideo) {
         if (-not (Test-Path -LiteralPath $script:VideoKey)) {
